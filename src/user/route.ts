@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { Trader } from "../trader/model";
 import { User } from "./model";
+import nodemailer from "nodemailer";
 
 require("dotenv").config();
 export const user = express.Router();
@@ -16,14 +17,141 @@ interface ResponseObject {
 }
 
 // Configure Nodemailer transport with Mailtrap
-// const transporter = nodemailer.createTransport({
-//   host: process.env.MAILTRAP_HOST,
-//   port: Number(process.env.MAILTRAP_PORT),
-//   auth: {
-//     user: process.env.MAILTRAP_USER,
-//     pass: process.env.MAILTRAP_PASS,
-//   },
-// });
+const transporter = nodemailer.createTransport({
+  host: process.env.MAILTRAP_HOST,
+  port: Number(process.env.MAILTRAP_PORT),
+  auth: {
+    user: process.env.MAILTRAP_USER,
+    pass: process.env.MAILTRAP_PASS,
+  },
+});
+
+user.post("/forgot-password", async (req, res) => {
+  const contentType = req.headers["content-type"];
+
+  // console.log(headers);
+  // console.log(contentType);
+
+  if (!contentType || contentType !== "application/json") {
+    return res.status(401).json({
+      code: "Error-01-0001",
+      status: "Error",
+      message: "Invalid Header.",
+    });
+  }
+
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(401).json({
+      code: "Error-02-0001",
+      status: "Error",
+      message: "Missing required field: email.",
+    });
+  }
+
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(400).json({
+        code: "Error-02-0003",
+        status: "Error",
+        message: "User not found. Please check your email.",
+      });
+    }
+
+    const resetToken = jwt.sign(
+      { userId: user._id, email: user.email, role: user.role },
+      process.env.JWT_SECRET!,
+      { expiresIn: "5m" }
+    );
+
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+    await transporter.sendMail({
+      from: "noreply@example.com",
+      to: email,
+      subject: "Password Reset Request",
+      text: `Click the following link to reset your password: ${resetUrl}`,
+    });
+
+    res.status(200).json({
+      code: "Success-01-0004",
+      status: "Success",
+      message: "Password reset email sent.",
+    });
+  } catch (error) {
+    res.status(500).json({
+      code: "Error-03-0001",
+      status: "Error",
+      message: "Internal server error during password reset.",
+    });
+  }
+});
+
+user.post("/auth/reset-password", async (req: Request, res: Response) => {
+  try {
+    const contentType = req.headers["content-type"];
+
+    if (!contentType || contentType !== "application/json") {
+      return res.status(400).json({
+        code: "Error-01-0001",
+        status: "Error",
+        message: "Invalid Header. Content-Type must be application/json.",
+      });
+    }
+
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({
+        code: "Error-02-0001",
+        status: "Error",
+        message: "Missing required fields: token and newPassword.",
+      });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET!) as jwt.JwtPayload;
+    } catch (err) {
+      console.error("Token verification failed:", err);
+      return res.status(400).json({
+        code: "Error-01-0003",
+        status: "Error",
+        message: "Invalid or expired token. Please request a new reset link.",
+      });
+    }
+
+    const user = await User.findById(decoded.userId);
+
+    if (!user) {
+      return res.status(404).json({
+        code: "Error-02-0003",
+        status: "Error",
+        message: "User not found. The token may be invalid.",
+      });
+    }
+
+    console.log("Resetting password for user:", user.email);
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+
+    return res.status(200).json({
+      code: "Success-01-0003",
+      status: "Success",
+      message:
+        "Password reset successful. You can now log in with your new password.",
+    });
+  } catch (error) {
+    console.error("Error resetting password:", error);
+    return res.status(500).json({
+      code: "Error-03-0001",
+      status: "Error",
+      message: "Internal server error. Please try again later.",
+    });
+  }
+});
 
 // Login Route
 user.post("/login", async (req: Request, res: Response) => {
@@ -278,197 +406,6 @@ user.post("/register", async (req: Request, res: Response) => {
 //       message: "Internal server error.",
 //     };
 //     res.status(500).json(response);
-//   }
-// });
-
-// Forgot Password Route
-// auth.post("/forgot-password", async (req: Request, res: Response) => {
-//   const contentType = req.headers["content-type"];
-
-//   if (!contentType || contentType !== "application/json") {
-//     const response: ResponseObject = {
-//       code: "Error-01-0001",
-//       status: "Error",
-//       message: "Invalid Header.",
-//     };
-//     return res.status(401).json(response);
-//   }
-
-//   const { email } = req.body;
-
-//   if (!email) {
-//     const response: ResponseObject = {
-//       code: "Error-02-0001",
-//       status: "Error",
-//       message: "Missing required field: email.",
-//     };
-//     return res.status(400).json(response);
-//   }
-
-//   try {
-//     // Find user by email in UserAuth
-//     const userAuth = await UserAuth.findOne({ email });
-//     if (!userAuth) {
-//       const response: ResponseObject = {
-//         code: "Error-02-0003",
-//         status: "Error",
-//         message: "User not found. Please check your email.",
-//       };
-//       return res.status(404).json(response);
-//     }
-
-//     // Get user data
-//     const user = await User.findById(userAuth.userId);
-//     if (!user) {
-//       const response: ResponseObject = {
-//         code: "Error-02-0003",
-//         status: "Error",
-//         message: "User data not found.",
-//       };
-//       return res.status(404).json(response);
-//     }
-
-//     const resetToken = jwt.sign(
-//       { userId: user.userId, email: userAuth.email, role: user.role },
-//       process.env.JWT_SECRET!,
-//       {
-//         algorithm: "HS256",
-//         expiresIn: "5m",
-//       }
-//     );
-
-//     // Store reset token and expiration
-//     const resetExpires = new Date();
-//     resetExpires.setMinutes(resetExpires.getMinutes() + 5);
-
-//     await UserAuth.updateOne(
-//       { _id: userAuth._id },
-//       {
-//         $set: {
-//           passwordResetToken: resetToken,
-//           passwordResetExpires: resetExpires,
-//         },
-//       }
-//     );
-
-//     const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
-//     await transporter.sendMail({
-//       from: "noreply@example.com",
-//       to: email,
-//       subject: "Password Reset Request",
-//       text: `Click the following link to reset your password: ${resetUrl}`,
-//     });
-
-//     const response: ResponseObject = {
-//       code: "Success-01-0004",
-//       status: "Success",
-//       message: "Password reset email sent.",
-//     };
-//     res.status(200).json(response);
-//   } catch (error) {
-//     console.error("Error during password reset:", error);
-//     const response: ResponseObject = {
-//       code: "Error-03-0001",
-//       status: "Error",
-//       message: "Internal server error during password reset.",
-//     };
-//     res.status(500).json(response);
-//   }
-// });
-
-// Reset Password Route
-// auth.post("/reset-password", async (req: Request, res: Response) => {
-//   const contentType = req.headers["content-type"];
-
-//   if (!contentType || contentType !== "application/json") {
-//     const response: ResponseObject = {
-//       code: "Error-01-0001",
-//       status: "Error",
-//       message: "Invalid Header. Content-Type must be application/json.",
-//     };
-//     return res.status(400).json(response);
-//   }
-
-//   try {
-//     const { token, newPassword } = req.body;
-
-//     if (!token || !newPassword) {
-//       const response: ResponseObject = {
-//         code: "Error-02-0001",
-//         status: "Error",
-//         message: "Missing required fields: token and newPassword.",
-//       };
-//       return res.status(400).json(response);
-//     }
-
-//     let decoded;
-
-//     try {
-//       decoded = jwt.verify(token, process.env.JWT_SECRET!) as jwt.JwtPayload;
-//     } catch (err) {
-//       console.error("Token verification failed:", err);
-//       const response: ResponseObject = {
-//         code: "Error-01-0003",
-//         status: "Error",
-//         message: "Invalid or expired token. Please request a new reset link.",
-//       };
-//       return res.status(401).json(response);
-//     }
-
-//     // Find user by email in UserAuth
-//     const userAuth = await UserAuth.findOne({ email: decoded.email });
-//     if (!userAuth) {
-//       const response: ResponseObject = {
-//         code: "Error-02-0003",
-//         status: "Error",
-//         message: "User not found. The token may be invalid.",
-//       };
-//       return res.status(404).json(response);
-//     }
-
-//     // Verify token matches stored token and is not expired
-//     if (
-//       userAuth.passwordResetToken !== token ||
-//       !userAuth.passwordResetExpires ||
-//       new Date() > userAuth.passwordResetExpires
-//     ) {
-//       const response: ResponseObject = {
-//         code: "Error-01-0003",
-//         status: "Error",
-//         message: "Invalid or expired token. Please request a new reset link.",
-//       };
-//       return res.status(401).json(response);
-//     }
-
-//     const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-//     // Update password and clear reset token
-//     await UserAuth.updateOne(
-//       { _id: userAuth._id },
-//       {
-//         $set: {
-//           password: hashedPassword,
-//           passwordResetToken: null,
-//           passwordResetExpires: null,
-//         },
-//       }
-//     );
-
-//     const response: ResponseObject = {
-//       code: "Success-01-0003",
-//       status: "Success",
-//       message:
-//         "Password reset successful. You can now log in with your new password.",
-//     };
-//     return res.status(200).json(response);
-//   } catch (error) {
-//     console.error("Error resetting password:", error);
-//     const response: ResponseObject = {
-//       code: "Error-03-0001",
-//       status: "Error",
-//       message: "Internal server error. Please try again later.",
-//     };
-//     return res.status(500).json(response);
 //   }
 // });
 

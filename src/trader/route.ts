@@ -4,6 +4,7 @@ import { Course } from "../course/model";
 import dayjs from "dayjs";
 
 import mongoose from "mongoose";
+import { Enrollment } from "../enrollment/model";
 
 require("dotenv").config();
 
@@ -241,7 +242,7 @@ trader.post("/registerCourse", async (req: Request, res: Response) => {
     }
 
     // Add the training to trader's list
-    const newTraining: Training = {
+    const newTraining = {
       courseId: courseId,
       date: course.courseDate,
       courseName: course.courseName,
@@ -251,24 +252,58 @@ trader.post("/registerCourse", async (req: Request, res: Response) => {
       imageUrl: course.imageUrl,
     };
 
-    trader.trainings.push(newTraining);
+    // Create a new enrollment record
+    const enrollment = new Enrollment({
+      userId: userId,
+      courseId: courseId,
+      enrollDate: new Date(),
+      status: "pending",
+    });
 
-    // Decrement available seats
-    course.availableSeats -= 1;
-
-    // Save both documents
     try {
+      // Add training to trader
+      trader.trainings.push(newTraining);
       await trader.save();
+
+      // Decrement available seats
+      course.availableSeats -= 1;
       await course.save();
+
+      // Save enrollment record
+      await enrollment.save();
+
+      return res.status(200).json({
+        code: "Success-02-0001",
+        status: "Success",
+        message: "Course registered successfully",
+        data: {
+          trader,
+          enrollment: {
+            id: enrollment._id,
+            status: enrollment.status,
+            enrollDate: enrollment.enrollDate,
+          },
+        },
+      });
     } catch (saveError) {
       console.error("Error saving data:", saveError);
 
-      // If there was an error, attempt to rollback trader changes
+      // If there was an error, attempt to rollback changes
       try {
+        // Rollback trader changes
         if (trader.trainings.length > 0) {
           trader.trainings.pop();
         }
         await trader.save();
+
+        // Rollback course changes
+        course.availableSeats += 1;
+        await course.save();
+
+        // Try to delete the enrollment if it was created
+        if (enrollment._id) {
+          await Enrollment.findByIdAndDelete(enrollment._id);
+        }
       } catch (rollbackError) {
         console.error("Error during rollback:", rollbackError);
       }
@@ -279,13 +314,6 @@ trader.post("/registerCourse", async (req: Request, res: Response) => {
         message: "Error registering for course. Please try again.",
       });
     }
-
-    return res.status(200).json({
-      code: "Success-02-0001",
-      status: "Success",
-      message: "Course registered successfully",
-      data: trader,
-    });
   } catch (error) {
     console.error("Error registering course:", error);
     return res.status(500).json({

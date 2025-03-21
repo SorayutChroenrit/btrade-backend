@@ -8,6 +8,7 @@ import { course } from "./course/route";
 import { user } from "./user/route";
 import { trader } from "./trader/route";
 import { payment } from "./payment/route";
+import { enrollment } from "./enrollment/route";
 
 // import { course } from "./course/route";
 // import { user } from "./users/route";
@@ -42,6 +43,7 @@ app.use("/api/v1", course);
 app.use("/api/v1", user);
 app.use("/api/v1", trader);
 app.use("/api/v1", payment);
+app.use("/api/v1", enrollment);
 
 // useSwagger(app);
 
