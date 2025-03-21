@@ -187,12 +187,8 @@ user.post("/register", async (req: Request, res: Response) => {
     });
     await user.save();
 
-    // คำนวณวันที่สิ้นสุดสถานะ (2 ปีนับจากวันที่สมัคร)
-    const startDate = new Date();
-    const endDate = new Date(startDate);
-    endDate.setFullYear(endDate.getFullYear() + 2);
-
-    // สร้างข้อมูลผู้ค้า
+    // สร้างข้อมูลผู้ค้า - โดยไม่กำหนด startDate และ endDate
+    // จะถูกกำหนดเมื่อผู้ค้าเข้ารับการอบรมครั้งแรก
     const trader = new Trader({
       userId: user._id,
       company,
@@ -200,15 +196,13 @@ user.post("/register", async (req: Request, res: Response) => {
       idCard,
       email,
       phoneNumber: phonenumber,
-      startDate,
-      endDate,
       durationDisplay: {
         years: 0,
         months: 0,
         days: 0,
       },
       remainingTimeDisplay: {
-        years: 2,
+        years: 0,
         months: 0,
         days: 0,
       },
