@@ -59,23 +59,22 @@ trader.get("/traders", async (req: Request, res: Response) => {
 });
 
 // Get a specific trader
-trader.get("/traders/:traderId", async (req: Request, res: Response) => {
+trader.get("/traders/:userId", async (req: Request, res: Response) => {
   try {
-    const { traderId } = req.params;
-    const trader = await Trader.findOne({ _id: traderId });
-
+    const { userId } = req.params;
+    const trader = await Trader.findOne({ userId });
     if (!trader) {
       return res.status(404).json({
         code: "Error-01-0007",
         status: "Error",
-        message: "Course not found",
+        message: "Trader not found",
       });
     }
 
     res.status(200).json({
       code: "Success-01-0001",
       status: "Success",
-      message: "Course retrieved successfully",
+      message: "Trader retrieved successfully",
       data: trader,
     });
   } catch (error) {
@@ -299,11 +298,9 @@ trader.post("/registerCourse", async (req: Request, res: Response) => {
 
 // Update trader profile route
 trader.put("/traders/update-profile", async (req: Request, res: Response) => {
-  console.log(req.body);
   try {
     // Get traderId and update fields from request body
     const { traderId, ...updateFields } = req.body;
-    console.log(traderId);
     // Validate traderId
     if (!traderId) {
       return res.status(400).json({

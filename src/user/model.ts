@@ -7,7 +7,7 @@ const userSchema = new mongoose.Schema(
     role: { type: String, enum: ["admin", "user"], required: true },
     status: {
       type: String,
-      enum: ["Active", "Suspended", "Locked"],
+      enum: ["Active", "InActive"],
       default: "Active",
     },
     statusReason: {

@@ -494,21 +494,19 @@ user.get("/users", async (req: Request, res: Response) => {
 user.get("/users/:userId", async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
-    // console.log("Fetching courseId:", courseId);
-    const user = await User.findOne({ userId });
-
+    const user = await User.findOne({ _id: userId });
     if (!user) {
       return res.status(404).json({
         code: "Error-01-0007",
         status: "Error",
-        message: "Course not found",
+        message: "User not found",
       });
     }
 
     res.status(200).json({
       code: "Success-01-0001",
       status: "Success",
-      message: "Course retrieved successfully",
+      message: "User retrieved successfully",
       data: user,
     });
   } catch (error) {
@@ -516,6 +514,52 @@ user.get("/users/:userId", async (req: Request, res: Response) => {
       code: "Error-03-0001",
       status: "Error",
       message: "Internal server error",
+    });
+  }
+});
+
+user.put("/users/update-user", async (req: Request, res: Response) => {
+  try {
+    // Get traderId and update fields from request body
+    const { _id, ...updateFields } = req.body;
+    console.log(req.body);
+    console.log(_id);
+    // Validate traderId
+    if (!_id) {
+      return res.status(400).json({
+        code: "Error-01-0004",
+        status: "Error",
+        message: "Trader ID is required",
+      });
+    }
+
+    // Find the trader in the database
+    const user = await User.findOne({ _id });
+    if (!user) {
+      return res.status(404).json({
+        code: "Error-01-0002",
+        status: "Error",
+        message: "Trader not found",
+      });
+    }
+
+    // Update the trader with only the fields provided
+    const updateResponse = await User.updateOne(
+      { _id: _id },
+      { $set: updateFields }
+    );
+
+    return res.status(200).json({
+      code: "Success-01-0001",
+      status: "Success",
+      message: "Trader profile updated successfully",
+    });
+  } catch (error) {
+    console.error("Error updating trader profile:", error);
+    return res.status(500).json({
+      code: "Error-01-0003",
+      status: "Error",
+      message: "Failed to update trader profile",
     });
   }
 });
