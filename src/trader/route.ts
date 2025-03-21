@@ -2,13 +2,10 @@ import express, { Request, Response } from "express";
 import { Trader } from "./model";
 import { Course } from "../course/model";
 import dayjs from "dayjs";
-import isSameOrBefore from "dayjs/plugin/isSameOrBefore";
-import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
+
 import mongoose from "mongoose";
 
 require("dotenv").config();
-dayjs.extend(isSameOrBefore);
-dayjs.extend(isSameOrAfter);
 
 // interface ResponseObject {
 //   code: string;
@@ -257,57 +254,21 @@ trader.post("/registerCourse", async (req: Request, res: Response) => {
 
     trader.trainings.push(newTraining);
 
-    // Handle first-time registration vs. status extension
-    if (trader.trainings.length === 1) {
-      // First-time registration: set startDate to today if not already set
-      if (!trader.startDate) {
-        trader.startDate = new Date();
-      }
-
-      // Set endDate to 2 years from startDate
-      trader.endDate = dayjs(trader.startDate).add(2, "year").toDate();
-
-      console.log(
-        `First-time registration: Setting trader status from ${trader.startDate} to ${trader.endDate}`
-      );
-    } else {
-      // For subsequent courses, extend by 1 year from current endDate
-      const currentEndDate = dayjs(trader.endDate);
-      const oneYearExtension = currentEndDate.add(1, "year");
-      const twoYearsFromStart = dayjs(trader.startDate).add(2, "year");
-
-      // Use the earlier of the two dates
-      trader.endDate = oneYearExtension.isAfter(twoYearsFromStart)
-        ? twoYearsFromStart.toDate()
-        : oneYearExtension.toDate();
-
-      console.log(`Status extended: New end date is ${trader.endDate}`);
-    }
-
     // Decrement available seats
     course.availableSeats -= 1;
 
-    // Save both documents - since we're not using transactions, we need to handle potential failures
+    // Save both documents
     try {
-      // Save trader first
       await trader.save();
-
-      // Then save course
       await course.save();
     } catch (saveError) {
       console.error("Error saving data:", saveError);
 
       // If there was an error, attempt to rollback trader changes
-      // This isn't atomic but provides some level of rollback
       try {
-        // Remove the last training
         if (trader.trainings.length > 0) {
           trader.trainings.pop();
         }
-
-        // Restore original end date if needed
-        // Note: This would need additional code to track the original end date
-
         await trader.save();
       } catch (rollbackError) {
         console.error("Error during rollback:", rollbackError);
@@ -320,51 +281,11 @@ trader.post("/registerCourse", async (req: Request, res: Response) => {
       });
     }
 
-    // Calculate total age and days until renewal for response
-    const today = dayjs();
-    const startDate = dayjs(trader.startDate);
-    const endDate = dayjs(trader.endDate);
-
-    // Calculate total age
-    const diffYears = today.diff(startDate, "year");
-    const diffMonths = today.diff(startDate, "month") % 12;
-    const diffDays = today.diff(startDate, "day") % 30;
-    const totalAge = `${diffYears} ปี ${diffMonths} เดือน ${diffDays} วัน`;
-
-    // Calculate days until renewal
-    const renewalYears = endDate.diff(today, "year");
-    const renewalMonths = endDate.diff(today, "month") % 12;
-    const renewalDays = endDate.diff(today, "day") % 30;
-    const daysUntilRenewal = `${renewalYears} ปี ${renewalMonths} เดือน ${renewalDays} วัน`;
-
     return res.status(200).json({
       code: "Success-02-0001",
       status: "Success",
       message: "Course registered successfully",
-      data: {
-        trader: {
-          _id: trader._id,
-          name: trader.name,
-          company: trader.company,
-          startDate: trader.startDate,
-          endDate: trader.endDate,
-          totalAge,
-          daysUntilRenewal,
-        },
-        course: {
-          _id: course._id,
-          courseName: course.courseName,
-          courseDate: course.courseDate,
-          location: course.location,
-          hours: course.hours,
-        },
-        training: {
-          date: newTraining.date,
-          courseName: newTraining.courseName,
-          location: newTraining.location,
-          hours: newTraining.hours,
-        },
-      },
+      data: trader,
     });
   } catch (error) {
     console.error("Error registering course:", error);
