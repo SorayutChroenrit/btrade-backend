@@ -296,3 +296,50 @@ trader.post("/registerCourse", async (req: Request, res: Response) => {
     });
   }
 });
+
+// Update trader profile route
+trader.put("/traders/update-profile", async (req: Request, res: Response) => {
+  console.log(req.body);
+  try {
+    // Get traderId and update fields from request body
+    const { traderId, ...updateFields } = req.body;
+    console.log(traderId);
+    // Validate traderId
+    if (!traderId) {
+      return res.status(400).json({
+        code: "Error-01-0004",
+        status: "Error",
+        message: "Trader ID is required",
+      });
+    }
+
+    // Find the trader in the database
+    const trader = await Trader.findOne({ _id: traderId });
+    if (!trader) {
+      return res.status(404).json({
+        code: "Error-01-0002",
+        status: "Error",
+        message: "Trader not found",
+      });
+    }
+
+    // Update the trader with only the fields provided
+    const updateResponse = await Trader.updateOne(
+      { _id: traderId },
+      { $set: updateFields }
+    );
+
+    return res.status(200).json({
+      code: "Success-01-0001",
+      status: "Success",
+      message: "Trader profile updated successfully",
+    });
+  } catch (error) {
+    console.error("Error updating trader profile:", error);
+    return res.status(500).json({
+      code: "Error-01-0003",
+      status: "Error",
+      message: "Failed to update trader profile",
+    });
+  }
+});
