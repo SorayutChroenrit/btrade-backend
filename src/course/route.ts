@@ -689,11 +689,13 @@ course.put(
   "/",
   verifyToken,
   checkAdminRole,
-  async (req: Request, res: Response) => {
-    console.log(req.body);
+  upload.single("courseImage"),
+  async (req: MulterRequest, res: Response) => {
     try {
       // Get courseId and the fields to update from the request body
-      const { courseId, updateFields } = req.body;
+      const { courseId } = req.body;
+      const updateFields = { ...req.body };
+      delete updateFields.courseId; // Remove courseId from the update fields
 
       // Validate courseId
       if (!courseId) {
@@ -713,6 +715,117 @@ course.put(
           message: "Course not found",
         });
       }
+
+      // Handle image upload if a file is provided
+      const file = req.file;
+      if (file) {
+        try {
+          // Upload image to Cloudinary
+          const stream = streamifier.createReadStream(file.buffer);
+          const uploadResponse = await new Promise<any>((resolve, reject) => {
+            const uploadStream = cloudinary.v2.uploader.upload_stream(
+              {
+                resource_type: "image",
+                public_id: `${course.courseName.replace(/\s+/g, "_")}_updated`,
+                folder: "CourseImage",
+              },
+              (error, result) => {
+                if (error) {
+                  return reject(error);
+                }
+                resolve(result);
+              }
+            );
+
+            stream.pipe(uploadStream);
+          });
+
+          // Add the image URL to the update fields
+          updateFields.imageUrl = uploadResponse.secure_url;
+
+          // Update the Stripe product with the new image if it exists
+          if (course.stripeProductId) {
+            await stripe.products.update(course.stripeProductId, {
+              images: [uploadResponse.secure_url],
+            });
+          }
+        } catch (uploadError) {
+          console.error("Error uploading image:", uploadError);
+          return res.status(500).json({
+            code: "Error-01-0005",
+            status: "Error",
+            message: "Failed to upload image",
+          });
+        }
+      }
+
+      // Handle courseTags if it's provided as a string
+      if (
+        updateFields.courseTags &&
+        typeof updateFields.courseTags === "string"
+      ) {
+        try {
+          updateFields.courseTags = JSON.parse(updateFields.courseTags);
+        } catch (e) {
+          // If parsing fails, try to split by comma
+          updateFields.courseTags = updateFields.courseTags
+            .split(",")
+            .map((tag: string) => tag.trim());
+        }
+      }
+
+      // Handle price update in Stripe if price is changed
+      if (updateFields.price && course.stripePriceId) {
+        try {
+          // Create a new price for the product in THB
+          const stripePrice = await stripe.prices.create({
+            unit_amount: Number(updateFields.price) * 100,
+            currency: "thb",
+            product: course.stripeProductId,
+          });
+
+          // Add the new price ID to update fields
+          updateFields.stripePriceId = stripePrice.id;
+        } catch (stripeError) {
+          console.error("Error updating Stripe price:", stripeError);
+          // Continue with the course update even if Stripe update fails
+        }
+      }
+
+      // Convert date fields to Date objects
+      if (updateFields.startDate) {
+        updateFields.startDate = new Date(updateFields.startDate);
+      }
+      if (updateFields.endDate) {
+        updateFields.endDate = new Date(updateFields.endDate);
+      }
+      if (updateFields.courseDate) {
+        updateFields.courseDate = new Date(updateFields.courseDate);
+      }
+
+      // Convert numeric fields to numbers
+      if (updateFields.price) {
+        updateFields.price = Number(updateFields.price);
+      }
+      if (updateFields.hours) {
+        updateFields.hours = Number(updateFields.hours);
+      }
+      if (updateFields.maxSeats) {
+        updateFields.maxSeats = Number(updateFields.maxSeats);
+      }
+      if (updateFields.availableSeats) {
+        updateFields.availableSeats = Number(updateFields.availableSeats);
+      }
+
+      // Convert boolean fields
+      if (updateFields.isPublished !== undefined) {
+        updateFields.isPublished =
+          updateFields.isPublished === "true" ||
+          updateFields.isPublished === true;
+      }
+
+      // Add the updatedAt field
+      updateFields.updatedAt = new Date();
 
       // Update the course with only the fields provided
       const updateResponse = await Course.updateOne(
