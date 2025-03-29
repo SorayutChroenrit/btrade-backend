@@ -1,69 +1,151 @@
 import express, { Request, Response } from "express";
 import { Trader } from "./model";
-import { Course } from "../course/model";
-import dayjs from "dayjs";
-
-import mongoose from "mongoose";
-import { Enrollment } from "../enrollment/model";
+import { checkAdminRole, verifyToken } from "../../middleware/middleware";
 
 require("dotenv").config();
 
-// interface ResponseObject {
-//   code: string;
-//   status: string;
-//   data?: object;
-//   message?: string;
-// }
-
 export const trader = express.Router();
 
-interface Training {
-  courseId: mongoose.Types.ObjectId;
-  courseName: string;
-  description: string;
-  location: string;
-  hours: number;
-  date: Date;
-  imageUrl?: string;
-}
+/**
+ * @swagger
+ * /trader:
+ *   get:
+ *     summary: Retrieve all traders
+ *     tags: [Trader]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Traders retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code:
+ *                   type: string
+ *                   example: 'Success-01-0001'
+ *                 status:
+ *                   type: string
+ *                   example: 'Success'
+ *                 message:
+ *                   type: string
+ *                   example: 'Traders retrieved successfully'
+ *                 data:
+ *                   type: array
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code:
+ *                   type: string
+ *                   example: 'Error-03-0001'
+ *                 status:
+ *                   type: string
+ *                   example: 'Error'
+ *                 message:
+ *                   type: string
+ *                   example: 'Internal server error while fetching traders'
+ */
 
-// Create a new course
-trader.post("/traders", async (req: Request, res: Response) => {
-  try {
-    const newCourse = new Trader(req.body);
-    const savedCourse = await newCourse.save();
-    res.status(201).json(savedCourse);
-  } catch (error) {
-    console.error("Error creating course:", error);
-    res.status(400).json({ error });
-  }
-});
-
-// Get all courses
-trader.get("/traders", async (req: Request, res: Response) => {
+// Get all traders
+trader.get("/", verifyToken, async (req: Request, res: Response) => {
   try {
     const traders = await Trader.find();
+
     res.status(200).json({
       code: "Success-01-0001",
       status: "Success",
-      message: "Courses retrieved successfully",
+      message: "Traders retrieved successfully",
       data: traders,
     });
   } catch (error) {
-    console.error("Error retrieving courses:", error);
+    console.error("Error retrieving traders:", error);
     res.status(500).json({
       code: "Error-03-0001",
       status: "Error",
-      message: "Internal server error while fetching courses",
+      message: "Internal server error while fetching traders",
     });
   }
 });
 
+/**
+ * @swagger
+ * /trader/{userId}:
+ *   get:
+ *     summary: Retrieve a specific trader
+ *     tags: [Trader]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID of the trader to retrieve
+ *     responses:
+ *       200:
+ *         description: Trader retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code:
+ *                   type: string
+ *                   example: 'Success-01-0001'
+ *                 status:
+ *                   type: string
+ *                   example: 'Success'
+ *                 message:
+ *                   type: string
+ *                   example: 'Trader retrieved successfully'
+ *                 data:
+ *                   type: object
+ *                   description: Trader details
+ *       404:
+ *         description: Trader not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code:
+ *                   type: string
+ *                   example: 'Error-01-0007'
+ *                 status:
+ *                   type: string
+ *                   example: 'Error'
+ *                 message:
+ *                   type: string
+ *                   example: 'Trader not found'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code:
+ *                   type: string
+ *                   example: 'Error-03-0001'
+ *                 status:
+ *                   type: string
+ *                   example: 'Error'
+ *                 message:
+ *                   type: string
+ *                   example: 'Internal server error'
+ */
 // Get a specific trader
-trader.get("/traders/:userId", async (req: Request, res: Response) => {
+trader.get("/:userId", verifyToken, async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
     const trader = await Trader.findOne({ userId });
+
     if (!trader) {
       return res.status(404).json({
         code: "Error-01-0007",
@@ -87,284 +169,162 @@ trader.get("/traders/:userId", async (req: Request, res: Response) => {
   }
 });
 
-trader.post("/verify-id", async (req: Request, res: Response) => {
-  try {
-    const contentType = req.headers["content-type"];
-    if (!contentType || contentType !== "application/json") {
-      return res.status(400).json({
-        code: "Error-01-0001",
-        status: "Error",
-        message: "Invalid Headers",
-      });
-    }
-
-    const { userId, idCard } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({
-        code: "Error-01-0002",
-        status: "Error",
-        message: "Missing or invalid User Id",
-      });
-    }
-
-    if (!idCard) {
-      return res.status(400).json({
-        code: "Error-01-0002",
-        status: "Error",
-        message: "Missing or invalid ID Card field.",
-      });
-    }
-    console.log(req.body);
-
-    const trader = await Trader.findOne({ idCard });
-    if (!trader) {
-      return res.status(404).json({
-        code: "Error-01-0004",
-        status: "Error",
-        message: "ID Card not found in the system.",
-      });
-    }
-
-    const requestUserId = userId.toString();
-    const traderUserId = trader.userId.toString();
-
-    if (requestUserId !== traderUserId) {
-      return res.status(403).json({
-        code: "Error-01-0007",
-        status: "Error",
-        message: "The provided ID Card does not belong to you.",
-      });
-    }
-
-    res.status(200).json({
-      code: "Success-01-0001",
-      status: "Success",
-      message: "ID Card verified successfully.",
-    });
-  } catch (error) {
-    console.error("Error during ID card verification:", error);
-    res.status(500).json({
-      code: "Error-03-0001",
-      status: "Error",
-      message: "Internal server error.",
-    });
-  }
-});
-
-// Complete the registerCourse endpoint
-trader.post("/registerCourse", async (req: Request, res: Response) => {
-  try {
-    const { userId, courseId } = req.body;
-
-    if (!userId || !courseId) {
-      return res.status(400).json({
-        code: "Error-02-0001",
-        status: "Error",
-        message: "User ID and Course ID are required",
-      });
-    }
-
-    // Find the trader
-    const trader = await Trader.findOne({ userId });
-    if (!trader) {
-      return res.status(404).json({
-        code: "Error-02-0002",
-        status: "Error",
-        message: "Trader not found",
-      });
-    }
-
-    // Check if trader is deleted
-    if (trader.isDeleted) {
-      return res.status(400).json({
-        code: "Error-02-0003",
-        status: "Error",
-        message: "This trader account has been deactivated",
-      });
-    }
-
-    // Find the course
-    const course = await Course.findOne({ _id: courseId });
-    if (!course) {
-      return res.status(404).json({
-        code: "Error-02-0004",
-        status: "Error",
-        message: "Course not found",
-      });
-    }
-
-    // Check if course is active
-    if (course.isDeleted) {
-      return res.status(400).json({
-        code: "Error-02-0005",
-        status: "Error",
-        message: "This course has been cancelled or is no longer available",
-      });
-    }
-
-    // Check if course date is in the past
-    if (dayjs(course.courseDate).isBefore(dayjs(), "day")) {
-      return res.status(400).json({
-        code: "Error-02-0006",
-        status: "Error",
-        message: "Cannot register for a course that has already taken place",
-      });
-    }
-
-    // Check available seats
-    if (course.availableSeats <= 0) {
-      return res.status(400).json({
-        code: "Error-02-0007",
-        status: "Error",
-        message: "No available seats for this course",
-      });
-    }
-
-    // Check if the trader is already registered for this course or any course on the same date
-    const alreadyRegistered = trader.trainings.some((training) => {
-      const trainingCourseIdStr = training.courseId
-        ? training.courseId.toString()
-        : null;
-      return (
-        trainingCourseIdStr === courseId.toString() ||
-        dayjs(training.date).isSame(dayjs(course.courseDate), "day")
-      );
-    });
-
-    if (alreadyRegistered) {
-      return res.status(400).json({
-        code: "Error-02-0008",
-        status: "Error",
-        message:
-          "Trader is already registered for this course or has another course on the same date",
-      });
-    }
-
-    // Add the training to trader's list
-    const newTraining = {
-      courseId: courseId,
-      date: course.courseDate,
-      courseName: course.courseName,
-      description: course.description,
-      location: course.location,
-      hours: course.hours,
-      imageUrl: course.imageUrl,
-    };
-
-    // Create a new enrollment record
-    const enrollment = new Enrollment({
-      userId: userId,
-      courseId: courseId,
-      enrollDate: new Date(),
-      status: "pending",
-    });
-
+/**
+ * @swagger
+ * /trader:
+ *   put:
+ *     summary: Update trader profile
+ *     tags: [Trader]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - traderId
+ *             properties:
+ *               traderId:
+ *                 type: string
+ *                 example: '67dbf9bf8057c409880a3e80'
+ *               phoneNumber:
+ *                 type: string
+ *                 example: '01222223452781'
+ *     responses:
+ *       200:
+ *         description: Trader updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code:
+ *                   type: string
+ *                   example: 'Success-01-0001'
+ *                 status:
+ *                   type: string
+ *                   example: 'Success'
+ *                 message:
+ *                   type: string
+ *                   example: 'Trader profile updated successfully'
+ *       400:
+ *         description: Bad request - Trader ID is required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code:
+ *                   type: string
+ *                   example: 'Error-01-0004'
+ *                 status:
+ *                   type: string
+ *                   example: 'Error'
+ *                 message:
+ *                   type: string
+ *                   example: 'Trader ID is required'
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: 'Unauthorized'
+ *       403:
+ *         description: Forbidden - Admin role required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: 'Admin role required'
+ *       404:
+ *         description: Trader not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code:
+ *                   type: string
+ *                   example: 'Error-01-0002'
+ *                 status:
+ *                   type: string
+ *                   example: 'Error'
+ *                 message:
+ *                   type: string
+ *                   example: 'Trader not found'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code:
+ *                   type: string
+ *                   example: 'Error-01-0003'
+ *                 status:
+ *                   type: string
+ *                   example: 'Error'
+ *                 message:
+ *                   type: string
+ *                   example: 'Failed to update trader profile'
+ */
+// Update trader profile route
+trader.put(
+  "/",
+  verifyToken,
+  checkAdminRole,
+  async (req: Request, res: Response) => {
     try {
-      // Add training to trader
-      trader.trainings.push(newTraining);
-      await trader.save();
-
-      // Decrement available seats
-      course.availableSeats -= 1;
-      await course.save();
-
-      // Save enrollment record
-      await enrollment.save();
-
-      return res.status(200).json({
-        code: "Success-02-0001",
-        status: "Success",
-        message: "Course registered successfully",
-        data: {
-          trader,
-          enrollment: {
-            id: enrollment._id,
-            status: enrollment.status,
-            enrollDate: enrollment.enrollDate,
-          },
-        },
-      });
-    } catch (saveError) {
-      console.error("Error saving data:", saveError);
-
-      // If there was an error, attempt to rollback changes
-      try {
-        // Rollback trader changes
-        if (trader.trainings.length > 0) {
-          trader.trainings.pop();
-        }
-        await trader.save();
-
-        // Rollback course changes
-        course.availableSeats += 1;
-        await course.save();
-
-        // Try to delete the enrollment if it was created
-        if (enrollment._id) {
-          await Enrollment.findByIdAndDelete(enrollment._id);
-        }
-      } catch (rollbackError) {
-        console.error("Error during rollback:", rollbackError);
+      // Get traderId and update fields from request body
+      const { traderId, ...updateFields } = req.body;
+      // Validate traderId
+      if (!traderId) {
+        return res.status(400).json({
+          code: "Error-01-0004",
+          status: "Error",
+          message: "Trader ID is required",
+        });
       }
 
+      // Find the trader in the database
+      const trader = await Trader.findOne({ _id: traderId });
+
+      if (!trader) {
+        return res.status(404).json({
+          code: "Error-01-0002",
+          status: "Error",
+          message: "Trader not found",
+        });
+      }
+
+      // Update the trader with only the fields provided
+      const updateResponse = await Trader.updateOne(
+        { _id: traderId },
+        { $set: updateFields }
+      );
+
+      return res.status(200).json({
+        code: "Success-01-0001",
+        status: "Success",
+        message: "Trader profile updated successfully",
+      });
+    } catch (error) {
+      console.error("Error updating trader profile:", error);
       return res.status(500).json({
-        code: "Error-02-0010",
+        code: "Error-01-0003",
         status: "Error",
-        message: "Error registering for course. Please try again.",
+        message: "Failed to update trader profile",
       });
     }
-  } catch (error) {
-    console.error("Error registering course:", error);
-    return res.status(500).json({
-      code: "Error-02-0009",
-      status: "Error",
-      message: "Internal server error",
-    });
   }
-});
-
-// Update trader profile route
-trader.put("/traders/update-profile", async (req: Request, res: Response) => {
-  try {
-    // Get traderId and update fields from request body
-    const { traderId, ...updateFields } = req.body;
-    // Validate traderId
-    if (!traderId) {
-      return res.status(400).json({
-        code: "Error-01-0004",
-        status: "Error",
-        message: "Trader ID is required",
-      });
-    }
-
-    // Find the trader in the database
-    const trader = await Trader.findOne({ _id: traderId });
-    if (!trader) {
-      return res.status(404).json({
-        code: "Error-01-0002",
-        status: "Error",
-        message: "Trader not found",
-      });
-    }
-
-    // Update the trader with only the fields provided
-    const updateResponse = await Trader.updateOne(
-      { _id: traderId },
-      { $set: updateFields }
-    );
-
-    return res.status(200).json({
-      code: "Success-01-0001",
-      status: "Success",
-      message: "Trader profile updated successfully",
-    });
-  } catch (error) {
-    console.error("Error updating trader profile:", error);
-    return res.status(500).json({
-      code: "Error-01-0003",
-      status: "Error",
-      message: "Failed to update trader profile",
-    });
-  }
-});
+);

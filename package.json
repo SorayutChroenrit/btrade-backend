@@ -49,11 +49,12 @@
     "nodemon": "^3.1.7",
     "streamifier": "^0.1.1",
     "stripe": "^17.7.0",
+    "swagger": "^0.7.5",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.8.2",
+    "typescript": "5.5.4",
     "uuid": "^10.0.0"
   }
 }

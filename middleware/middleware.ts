@@ -1,50 +1,106 @@
-import express, { Request, Response, NextFunction } from "express";
+import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+
+// Define interface for JWT payload
+interface TokenPayload {
+  userId: string;
+  email?: string;
+  role?: string;
+}
 
 declare global {
   namespace Express {
     interface Request {
-      user?: any;
+      user?: TokenPayload;
     }
   }
 }
 
-// Middleware to verify JWT token and attach user information to the request
-export function verifyJWT(req: Request, res: Response, next: NextFunction) {
+export const verifyToken = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
+    // Get authorization header
     const authHeader = req.headers.authorization;
 
-    // Check if authorization header is missing or does not start with "Bearer "
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    // Check if auth header exists
+    if (!authHeader) {
       return res.status(401).json({
         code: "Error-01-0001",
         status: "Error",
-        message: "Authorization header is missing or invalid.",
+        message: "Authorization header missing",
       });
     }
 
-    const token = authHeader.split(" ")[1];
-    const jwtSecret = process.env.JWT_SECRET || "your_secret_key"; // Secret key from environment or default
+    // Check if it's a Bearer token format
+    const parts = authHeader.split(" ");
+    if (parts.length !== 2 || parts[0] !== "Bearer") {
+      return res.status(401).json({
+        code: "Error-01-0002",
+        status: "Error",
+        message: "Authorization format should be: Bearer [token]",
+      });
+    }
 
-    jwt.verify(token, jwtSecret, (err, decoded) => {
-      if (err) {
-        console.error("Error verifying token:", err);
-        return res.status(401).json({
-          code: "Error-01-0002",
-          status: "Error",
-          message: "Invalid or expired token.",
-        });
-      }
+    const token = parts[1];
 
-      req.user = decoded; // Attach decoded token (user data) to the request
-      next(); // Proceed to the next route handler
-    });
+    // Verify token
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET || "your_secret_key"
+    ) as TokenPayload;
+
+    // Attach user info to request object
+    req.user = decoded;
+
+    next();
   } catch (error) {
-    console.error("Error handling request:", error);
-    res.status(500).json({
-      code: "Error-03-0001",
+    if (error instanceof jwt.JsonWebTokenError) {
+      return res.status(401).json({
+        code: "Error-01-0003",
+        status: "Error",
+        message: "Invalid token",
+      });
+    } else if (error instanceof jwt.TokenExpiredError) {
+      return res.status(401).json({
+        code: "Error-01-0004",
+        status: "Error",
+        message: "Token expired",
+      });
+    }
+
+    return res.status(500).json({
+      code: "Error-01-0005",
       status: "Error",
-      message: "Internal server error.",
+      message: "Internal server error",
     });
   }
-}
+};
+
+export const checkAdminRole = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  // Ensure user is authenticated first
+  if (!req.user) {
+    return res.status(401).json({
+      code: "Error-01-0006",
+      status: "Error",
+      message: "Unauthorized",
+    });
+  }
+
+  // Check if user has admin role
+  if (req.user.role && req.user.role === "admin") {
+    next();
+  } else {
+    return res.status(403).json({
+      code: "Error-01-0007",
+      status: "Error",
+      message: "Insufficient permissions",
+    });
+  }
+};

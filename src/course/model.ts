@@ -14,7 +14,7 @@ const courseSchema = new mongoose.Schema(
     maxSeats: { type: Number, required: true },
     availableSeats: { type: Number, required: true },
     courseTags: { type: [String], required: true },
-    imageUrl: { type: String, required: true },
+    imageUrl: { type: String },
     stripeProductId: { type: String, required: true },
     stripePriceId: { type: String, required: true },
     isPublished: { type: Boolean, default: false },
