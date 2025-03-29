@@ -23,7 +23,7 @@ pipeline {
                 script {
                     echo "Docker Build Image"
                     sh "/usr/local/bin/docker pull --disable-content-trust=false node:20-alpine"
-                    sh "/usr/local/bin/docker build -t btradebackend."
+                    sh "/usr/local/bin/docker build -t btradebackend ."
                     echo "Docker Build Image Success"
                 }
                     echo "Docker Image to Running Container"
