@@ -1,6 +1,7 @@
 import express, { Request, Response } from "express";
 import { Trader } from "./model";
 import { checkAdminRole, verifyToken } from "../../middleware/middleware";
+import { User } from "../user/model";
 
 require("dotenv").config();
 
@@ -279,52 +280,64 @@ trader.get("/:userId", verifyToken, async (req: Request, res: Response) => {
  *                   example: 'Failed to update trader profile'
  */
 // Update trader profile route
-trader.put(
-  "/",
-  verifyToken,
-  checkAdminRole,
-  async (req: Request, res: Response) => {
-    try {
-      // Get traderId and update fields from request body
-      const { traderId, ...updateFields } = req.body;
-      // Validate traderId
-      if (!traderId) {
-        return res.status(400).json({
-          code: "Error-01-0004",
-          status: "Error",
-          message: "Trader ID is required",
-        });
-      }
-
-      // Find the trader in the database
-      const trader = await Trader.findOne({ _id: traderId });
-
-      if (!trader) {
-        return res.status(404).json({
-          code: "Error-01-0002",
-          status: "Error",
-          message: "Trader not found",
-        });
-      }
-
-      // Update the trader with only the fields provided
-      const updateResponse = await Trader.updateOne(
-        { _id: traderId },
-        { $set: updateFields }
-      );
-
-      return res.status(200).json({
-        code: "Success-01-0001",
-        status: "Success",
-        message: "Trader profile updated successfully",
-      });
-    } catch (error) {
-      console.error("Error updating trader profile:", error);
-      return res.status(500).json({
-        code: "Error-01-0003",
+trader.put("/", verifyToken, async (req: Request, res: Response) => {
+  try {
+    const { traderId, ...updateFields } = req.body;
+    console.log(traderId);
+    // Validate traderId
+    if (!traderId) {
+      return res.status(400).json({
+        code: "Error-01-0004",
         status: "Error",
-        message: "Failed to update trader profile",
+        message: "Trader ID is required",
       });
     }
+
+    // Find the trader in the database
+    const trader = await Trader.findOne({ _id: traderId });
+
+    if (!trader) {
+      return res.status(404).json({
+        code: "Error-01-0002",
+        status: "Error",
+        message: "Trader not found",
+      });
+    }
+
+    // Check if email is being updated
+    if (updateFields.email && updateFields.email !== trader.email) {
+      // Find the corresponding user record
+      const user = await User.findOne({ email: trader.email });
+
+      if (user) {
+        // Update the user's email
+        await User.updateOne(
+          { email: trader.email },
+          { $set: { email: updateFields.email } }
+        );
+        console.log(
+          `User email updated from ${trader.email} to ${updateFields.email}`
+        );
+      }
+    }
+
+    // Update the trader with only the fields provided
+    const updateResponse = await Trader.updateOne(
+      { _id: traderId },
+      { $set: updateFields }
+    );
+
+    return res.status(200).json({
+      code: "Success-01-0001",
+      status: "Success",
+      message: "Trader profile updated successfully",
+    });
+  } catch (error) {
+    console.error("Error updating trader profile:", error);
+    return res.status(500).json({
+      code: "Error-01-0003",
+      status: "Error",
+      message: "Failed to update trader profile",
+    });
   }
-);
+});

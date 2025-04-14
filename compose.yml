@@ -2,7 +2,4 @@ services:
   backend:
     image: btradebackend
     ports:
-      -"10000:20000"
-  frontend:
-    image: btradefrontend
- 
+      - "10000:20000"  

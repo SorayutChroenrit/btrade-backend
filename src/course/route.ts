@@ -692,10 +692,9 @@ course.put(
   upload.single("courseImage"),
   async (req: MulterRequest, res: Response) => {
     try {
-      // Get courseId and the fields to update from the request body
       const { courseId } = req.body;
       const updateFields = { ...req.body };
-      delete updateFields.courseId; // Remove courseId from the update fields
+      delete updateFields.courseId;
 
       // Validate courseId
       if (!courseId) {

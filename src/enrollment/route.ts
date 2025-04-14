@@ -118,6 +118,111 @@ enrollment.get(
 );
 
 /**
+ * Check if user is already registered for a course
+ */
+enrollment.get(
+  "/check-registration",
+  verifyToken,
+  async (req: Request, res: Response) => {
+    try {
+      const { userId, courseId } = req.query;
+
+      // Validate required parameters
+      if (!userId || !courseId) {
+        return res.status(400).json({
+          code: "Error-05-0001",
+          status: "Error",
+          message: "User ID and Course ID are required",
+        });
+      }
+
+      // Ensure the logged-in user is checking their own registration
+      const requestUser = req.user;
+      if (!requestUser) {
+        return res.status(401).json({
+          code: "Error-05-0002",
+          status: "Error",
+          message: "Authentication required.",
+        });
+      }
+
+      if (requestUser.userId !== userId && requestUser.role !== "admin") {
+        return res.status(403).json({
+          code: "Error-05-0003",
+          status: "Error",
+          message: "You can only check your own registration status",
+        });
+      }
+
+      // Check for existing enrollment
+      const existingEnrollment = await Enrollment.findOne({
+        userId: userId,
+        courseId: courseId,
+      });
+
+      // Find the course
+      const course = await Course.findById(courseId);
+      if (!course) {
+        return res.status(404).json({
+          code: "Error-05-0004",
+          status: "Error",
+          message: "Course not found",
+        });
+      }
+
+      // Alternative check: Look in the registeredUsers array
+      let isInRegisteredUsers = false;
+      if (course.registeredUsers && Array.isArray(course.registeredUsers)) {
+        isInRegisteredUsers = course.registeredUsers.some(
+          (registeredUser: { userId: string }) =>
+            registeredUser.userId === userId
+        );
+      }
+
+      // Find the trader
+      const trader = await Trader.findOne({ userId });
+      if (!trader) {
+        return res.status(404).json({
+          code: "Error-05-0005",
+          status: "Error",
+          message: "Trader not found",
+        });
+      }
+
+      // Check trader's trainings
+      let isInTraderTrainings = false;
+      if (trader.trainings && Array.isArray(trader.trainings)) {
+        isInTraderTrainings = trader.trainings.some((training) => {
+          const trainingCourseIdStr = training.courseId
+            ? training.courseId.toString()
+            : null;
+          return trainingCourseIdStr === courseId.toString();
+        });
+      }
+
+      // A user is considered registered if any of these conditions are true
+      const isRegistered =
+        !!existingEnrollment || isInRegisteredUsers || isInTraderTrainings;
+
+      return res.status(200).json({
+        code: "Success-05-0001",
+        status: "Success",
+        message: "Registration status retrieved successfully",
+        isRegistered: isRegistered,
+        enrollmentStatus: existingEnrollment ? existingEnrollment.status : null,
+      });
+    } catch (error) {
+      console.error("Error checking registration status:", error);
+      return res.status(500).json({
+        code: "Error-05-0006",
+        status: "Error",
+        message: "Internal server error while checking registration status",
+      });
+    }
+  }
+);
+
+/**
  * Get enrollment history for a user
  */
 enrollment.get(
@@ -239,7 +344,7 @@ enrollment.get(
               ? {
                   id: course._id,
                   name: course.courseName,
-                  date: dayjs(course.courseDate).format("YYYY-MM-DD"),
+                  date: dayjs(course.courseDate).format("YYYY-MM-DD HH:mm:ss"),
                   location: course.location,
                 }
               : null,
@@ -367,7 +472,6 @@ enrollment.post(
   async (req: Request, res: Response) => {
     try {
       const { adminId, userId, courseId, action } = req.body;
-
       if (!userId || !courseId || !["approve", "reject"].includes(action)) {
         return res.status(400).json({
           code: "Error-02-0001",
@@ -444,7 +548,6 @@ enrollment.post(
         trader.trainings.splice(trainingIndex, 1);
         await trader.save();
 
-        // Remove user from waitingForApproveList if they're in it
         if (
           course.waitingForApproveList &&
           Array.isArray(course.waitingForApproveList)
@@ -481,75 +584,69 @@ enrollment.post(
         // Initialize `startDate` if not set - first time approval
         if (!trader.startDate) {
           trader.startDate = now.toDate();
-          // Set `endDate` to 2 years from `startDate`
-          trader.endDate = now.add(2, "year").toDate();
-        } else {
-          const startDate = dayjs(trader.startDate).tz("Asia/Bangkok");
-          const maxAllowedEndDate = startDate.add(2, "year"); // Maximum allowed date: 2 years
 
-          let currentEndDate = trader.endDate
-            ? dayjs(trader.endDate).tz("Asia/Bangkok")
-            : startDate;
+          // Set `endDate` to be EXACTLY 2 years from the start date
+          // Using the same day, month, and hour but 2 years later
+          const exactStartDate = dayjs(trader.startDate);
+          trader.endDate = exactStartDate.add(2, "year").toDate();
+        } else {
+          const exactStartDate = dayjs(trader.startDate);
+          const currentEndDate = trader.endDate
+            ? dayjs(trader.endDate)
+            : exactStartDate;
+
+          let newEndDate;
 
           if (currentEndDate.isBefore(now)) {
-            // If expired, reset to 1 year from now or cap at maxAllowedEndDate
-            currentEndDate = now.add(1, "year");
-
-            // Cap at max allowed
-            if (currentEndDate.isAfter(maxAllowedEndDate)) {
-              currentEndDate = maxAllowedEndDate;
-            }
+            // If expired, reset to 1 year from now
+            newEndDate = now.add(1, "year");
           } else {
-            // Add proportional time
-            const remainingTime = maxAllowedEndDate.diff(currentEndDate);
-            const oneYear = 365 * 24 * 60 * 60 * 1000; // one year in milliseconds
-
-            if (remainingTime >= oneYear) {
-              // If reduced by 1 year or more, add back 1 year
-              currentEndDate = currentEndDate.add(1, "year");
-            } else {
-              // Add proportional time (less than 1 year)
-              const remainingDuration = dayjs.duration(remainingTime);
-              const addMonths = Math.floor(remainingDuration.asMonths());
-              const addDays = Math.floor(remainingDuration.asDays() % 30);
-
-              currentEndDate = currentEndDate
-                .add(addMonths, "month")
-                .add(addDays, "day");
-            }
+            // For an active trader, add up to 1 year to current end date
+            newEndDate = currentEndDate.add(1, "year");
           }
 
-          // Cap the `endDate` at `startDate + 2 years`
-          trader.endDate = currentEndDate.isAfter(maxAllowedEndDate)
-            ? maxAllowedEndDate.toDate()
-            : currentEndDate.toDate();
+          // Exact 2-year limit from start date
+          const exactTwoYearsFromStart = exactStartDate.add(2, "year");
+
+          // Cap at exactly 2 years from start date
+          if (newEndDate.isAfter(exactTwoYearsFromStart)) {
+            newEndDate = exactTwoYearsFromStart;
+          }
+
+          trader.endDate = newEndDate.toDate();
         }
 
-        // Calculate duration and remaining time
-        const diffTime = dayjs(trader.endDate).diff(now);
+        // Ensure the exact calculation of 2 years is applied
+        const exactStartDate = dayjs(trader.startDate);
+        const exactTwoYears = exactStartDate.add(2, "year");
 
-        if (diffTime > 0) {
-          // Calculate years, months, days for display
-          const diffDuration = dayjs.duration(diffTime);
+        if (dayjs(trader.endDate).isAfter(exactTwoYears)) {
+          trader.endDate = exactTwoYears.toDate();
+        }
 
-          // Update durationDisplay
-          trader.durationDisplay = {
-            years: Math.floor(diffDuration.asYears()),
-            months: Math.floor(diffDuration.asMonths() % 12),
-            days: Math.floor(diffDuration.asDays() % 30),
-          };
+        // Calculate remaining time (actual time left from now until end date)
+        const remainingTime = dayjs(trader.endDate).diff(now);
 
-          // Update remainingTimeDisplay (same as duration in this context)
+        if (remainingTime > 0) {
+          // Calculate remaining time display (actual time remaining)
+          const remainingDuration = dayjs.duration(remainingTime);
+
           trader.remainingTimeDisplay = {
-            years: Math.floor(diffDuration.asYears()),
-            months: Math.floor(diffDuration.asMonths() % 12),
-            days: Math.floor(diffDuration.asDays() % 30),
+            years: Math.floor(remainingDuration.asYears()),
+            months: Math.floor(remainingDuration.asMonths() % 12),
+            days: Math.floor(remainingDuration.asDays() % 30),
           };
         } else {
           // No remaining time
-          trader.durationDisplay = { years: 0, months: 0, days: 0 };
           trader.remainingTimeDisplay = { years: 0, months: 0, days: 0 };
         }
+
+        // Set durationDisplay to exactly 2 years
+        trader.durationDisplay = {
+          years: 2,
+          months: 0,
+          days: 0,
+        };
 
         // Remove user from waitingForApproveList if they're in it
         if (
@@ -582,7 +679,7 @@ enrollment.post(
               status: {
                 startDate: trader.startDate,
                 endDate: trader.endDate,
-                duration: `${trader.durationDisplay.years} ปี ${trader.durationDisplay.months} เดือน ${trader.durationDisplay.days} วัน`,
+                duration: "2 ปี 0 เดือน 0 วัน", // Exactly 2 years
                 remainingTime: `${trader.remainingTimeDisplay.years} ปี ${trader.remainingTimeDisplay.months} เดือน ${trader.remainingTimeDisplay.days} วัน`,
               },
             },
