@@ -45,8 +45,11 @@ pipeline {
                 dir('btrader-backend') {
                     script {
                         echo "Building backend Docker image"
-                        sh "/usr/local/bin/docker pull --disable-content-trust=false node:20-alpine"
-                        sh "/usr/local/bin/docker build -t btradebackend ."
+                        // Change to disable-content-trust=true to avoid credential issues
+                        sh "/usr/local/bin/docker pull --disable-content-trust=true node:20"
+                        
+                        // Add --no-cache to avoid using cached layers that might have credential issues
+                        sh "/usr/local/bin/docker build --no-cache -t btradebackend ."
                         
                         echo "Deploying backend container"
                         sh "/usr/local/bin/docker rm -f btradebackend-run || true"
@@ -63,7 +66,11 @@ pipeline {
                 dir('btrader-frontend') {
                     script {
                         echo "Building frontend Docker image"
-                        sh "/usr/local/bin/docker build -t btradefrontend ."
+                        // Add a pre-pull step with credential trust disabled
+                        sh "/usr/local/bin/docker pull --disable-content-trust=true node:20-alpine"
+                        
+                        // Add --no-cache to avoid using cached layers that might have credential issues
+                        sh "/usr/local/bin/docker build --no-cache -t btradefrontend ."
                         
                         echo "Deploying frontend container"
                         sh "/usr/local/bin/docker rm -f btradefrontend-run || true"
