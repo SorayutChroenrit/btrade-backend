@@ -45,16 +45,12 @@ pipeline {
                 dir('btrader-backend') {
                     script {
                         echo "Building backend Docker image"
-                        // Change to disable-content-trust=true to avoid credential issues
-                        sh "/usr/local/bin/docker pull --disable-content-trust=true node:20"
-                        
-                        // Add --no-cache to avoid using cached layers that might have credential issues
-                        sh "/usr/local/bin/docker build --no-cache -t btradebackend ."
+                        sh "/usr/local/bin/docker pull --disable-content-trust=false node:20-alpine"
+                        sh "/usr/local/bin/docker build -t btradebackend ."
                         
                         echo "Deploying backend container"
                         sh "/usr/local/bin/docker rm -f btradebackend-run || true"
-                        sh "/usr/local/bin/docker run -d --name btradebackend-run -p 20000:20000 -e MONGODB_URI='mongodb+srv://sorayutchroenrit:ZUwGGkFh0ikC9CWx@bondtraderdb.i6rc0pn.mongodb.net/BONDTRADER_DB' btradebackend:latest"
-                        
+                        sh "/usr/local/bin/docker run -d --name btradebackend-run -p 20000:20000 -e MONGODB_URI='mongodb+srv://sorayutchroenrit:xTuSgmcwPhsGHotw@bondtraderdb.i6rc0pn.mongodb.net/BONDTRADER' btradebackend:latest"
                         echo "Backend deployment successful"
                     }
                 }
@@ -66,11 +62,7 @@ pipeline {
                 dir('btrader-frontend') {
                     script {
                         echo "Building frontend Docker image"
-                        // Add a pre-pull step with credential trust disabled
-                        sh "/usr/local/bin/docker pull --disable-content-trust=true node:20-alpine"
-                        
-                        // Add --no-cache to avoid using cached layers that might have credential issues
-                        sh "/usr/local/bin/docker build --no-cache -t btradefrontend ."
+                        sh "/usr/local/bin/docker build -t btradefrontend ."
                         
                         echo "Deploying frontend container"
                         sh "/usr/local/bin/docker rm -f btradefrontend-run || true"
