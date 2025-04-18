@@ -49,7 +49,7 @@ export const verifyToken = (
     // Verify token
     const decoded = jwt.verify(
       token,
-      process.env.JWT_SECRET || "your_secret_key"
+      process.env.JWT_SECRET || "BONDTRADE_SECRET_KEY"
     ) as TokenPayload;
 
     // Attach user info to request object

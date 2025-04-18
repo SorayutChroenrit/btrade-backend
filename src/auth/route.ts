@@ -482,7 +482,6 @@ auth.post("/auth/reset-password", async (req: Request, res: Response) => {
 // Login Route
 auth.post("/login", async (req: Request, res: Response) => {
   const contentType = req.headers["content-type"];
-
   if (!contentType || contentType !== "application/json") {
     const response: ResponseObject = {
       code: "Error-01-0001",
@@ -491,8 +490,8 @@ auth.post("/login", async (req: Request, res: Response) => {
     };
     return res.status(401).json(response);
   }
-
   const { email, password } = req.body;
+  console.log(email, password);
 
   if (!email || !password) {
     const response: ResponseObject = {
@@ -506,7 +505,7 @@ auth.post("/login", async (req: Request, res: Response) => {
   try {
     // Find user by email
     const user = await User.findOne({ email });
-
+    console.log(user);
     if (!user) {
       const response: ResponseObject = {
         code: "Error-02-0003",
