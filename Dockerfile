@@ -13,7 +13,4 @@ RUN npm uninstall bcrypt && \
 RUN mkdir -p node_modules/bcrypt && \
     echo "module.exports = require('bcryptjs');" > node_modules/bcrypt/index.js
 
-# Add host mapping to ensure MongoDB connection works
-RUN echo "host.docker.internal host-gateway" >> /etc/hosts
-
 CMD ["npx", "ts-node", "./src/app.ts"]
