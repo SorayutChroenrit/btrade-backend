@@ -714,7 +714,7 @@ enrollment.post(
   async (req: Request, res: Response) => {
     try {
       const { courseId } = req.body;
-
+      console.log(courseId);
       // Validate input
       if (!courseId) {
         return res.status(400).json({
