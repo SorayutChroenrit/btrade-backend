@@ -4,10 +4,15 @@ WORKDIR /src
 
 COPY . .
 
-RUN rm -rf node_modules
+# Install build dependencies for bcrypt
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    python3 \
+    make \
+    g++
 
-RUN npm uninstall bcrypt && \
-    npm install bcryptjs && \
-    npm install
+# Clean install with native bcrypt
+RUN rm -rf node_modules
+RUN npm ci || npm install
 
 CMD ["npx", "ts-node", "./src/app.ts"]
